@@ -1,9 +1,10 @@
 module Set2b where
 
-import Mooc.Todo
+import           Mooc.Todo
 
 -- Some imports you'll need. Don't add other imports :)
-import Data.List
+import           Data.ByteString.Char8 (count)
+import           Data.List
 
 ------------------------------------------------------------------------------
 -- Ex 1: compute binomial coefficients using recursion. Binomial
@@ -12,11 +13,11 @@ import Data.List
 --   B(n,k) = B(n-1,k) + B(n-1,k-1)
 --   B(n,0) = 1
 --   B(0,k) = 0, when k>0
---
--- Hint! pattern matching is your friend.
 
 binomial :: Integer -> Integer -> Integer
-binomial = todo
+binomial n 0 = 1
+binomial 0 k = 0
+binomial n k = binomial (n-1) k + binomial (n-1) (k-1)
 
 ------------------------------------------------------------------------------
 -- Ex 2: implement the odd factorial function. Odd factorial is like
@@ -27,7 +28,11 @@ binomial = todo
 --   oddFactorial 6 ==> 5*3*1 ==> 15
 
 oddFactorial :: Integer -> Integer
-oddFactorial = todo
+oddFactorial n
+  | n == 1 = 1
+  | mod n 2 == 0 = oddFactorial (n - 1)
+  | otherwise = n * oddFactorial (n - 2)
+
 
 ------------------------------------------------------------------------------
 -- Ex 3: implement the Euclidean Algorithm for finding the greatest
@@ -59,7 +64,11 @@ oddFactorial = todo
 -- * https://en.wikipedia.org/wiki/Euclidean_algorithm
 
 myGcd :: Integer -> Integer -> Integer
-myGcd = todo
+myGcd a 0 = a
+myGcd 0 b = b
+myGcd a b
+  | a > b = myGcd (a - b) b
+  | a <= b = myGcd a (b - a)
 
 ------------------------------------------------------------------------------
 -- Ex 4: Implement the function leftpad which adds space characters
@@ -75,7 +84,10 @@ myGcd = todo
 -- * you can compute the length of a string with the length function
 
 leftpad :: String -> Int -> String
-leftpad = todo
+leftpad str n
+  | length str >= n = str
+  | otherwise = replicate (n - length str) ' ' <> str
+
 
 ------------------------------------------------------------------------------
 -- Ex 5: let's make a countdown for a rocket! Given a number, you
@@ -85,13 +97,16 @@ leftpad = todo
 -- For example,
 --   countdown 4 ==> "Ready! 4... 3... 2... 1... Liftoff!"
 --
--- Hints:
 -- * you can combine strings with the ++ operator
 -- * you can use the show function to convert a number into a string
 -- * you'll probably need a recursive helper function
 
 countdown :: Integer -> String
-countdown = todo
+countdown n = "Ready! " <> numbers n
+  where
+    numbers :: Integer -> String
+    numbers 1  = "1... Liftoff!"
+    numbers n' = show n' <> "... " <> numbers (n' - 1)
 
 ------------------------------------------------------------------------------
 -- Ex 6: implement the function smallestDivisor that returns the
@@ -106,19 +121,37 @@ countdown = todo
 -- Ps. your function doesn't need to work for inputs 0 and 1, but
 -- remember this in the next exercise!
 --
--- Hint: remember the mod function!
 
 smallestDivisor :: Integer -> Integer
-smallestDivisor = todo
+smallestDivisor n = sd n 1
+  where
+    sd n d
+      | d * d > n = n -- No divisor
+      | d /= 1 && mod n d == 0 = d
+      | otherwise = sd n (d+1)
+
+-- Optimal solution:
+-- smallestDivisor :: Integer -> Integer
+-- smallestDivisor n
+--   | n <= 1 = 1
+--   | even n = 2
+--   | otherwise = fromMaybe n (findDivisor n 3)
+--   where
+--     findDivisor n d
+--       | d * d > n = Nothing  -- No divisor <= sqrt(n)
+--       | n `mod` d == 0 = Just d
+--       | otherwise = findDivisor n (d + 2)  -- Skip evens
 
 ------------------------------------------------------------------------------
 -- Ex 7: implement a function isPrime that checks if the given number
 -- is a prime number. Use the function smallestDivisor.
 --
 -- Ps. 0 and 1 are not prime numbers
-
 isPrime :: Integer -> Bool
-isPrime = todo
+isPrime n
+  | n == 0 || n == 1 = False
+  | smallestDivisor n == n = True
+  | otherwise = False
 
 ------------------------------------------------------------------------------
 -- Ex 8: implement a function biggestPrimeAtMost that returns the
@@ -131,6 +164,8 @@ isPrime = todo
 -- Examples:
 --   biggestPrimeAtMost 3 ==> 3
 --   biggestPrimeAtMost 10 ==> 7
-
 biggestPrimeAtMost :: Integer -> Integer
-biggestPrimeAtMost = todo
+biggestPrimeAtMost n
+  | n < 2 = n
+  | isPrime n = n
+  | otherwise = biggestPrimeAtMost (n - 1)
