@@ -1,8 +1,9 @@
 module Set8 where
 
-import Data.Char (intToDigit)
+import           Data.Char          (intToDigit)
 
-import Mooc.Todo
+import qualified Data.List.NonEmpty as NE
+import           Mooc.Todo
 
 -- This is the final project for Introduction to Functional
 -- Programming, part 1. We'll be developing a sort of functional image
@@ -12,7 +13,9 @@ import Mooc.Todo
 
 -- We'll use the JuicyPixels library to generate images. The library
 -- exposes the Codec.Picture module that has everything we need.
-import Codec.Picture
+import           Codec.Picture
+import qualified Data.List.NonEmpty as NE
+import           Test.QuickCheck    (NonEmptyList (NonEmpty))
 
 -- Let's start by defining Colors and Pictures.
 
@@ -133,7 +136,10 @@ renderListExample = renderList justADot (9,11) (9,11)
 --      ["000000","000000","000000"]]
 
 dotAndLine :: Picture
-dotAndLine = todo
+dotAndLine = Picture f
+  where f (Coord 3 4) = white
+        f (Coord _ 8) = pink
+        f (Coord _ _) = black
 ------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------
@@ -166,10 +172,23 @@ dotAndLine = todo
 --          ["7f0000","7f0000","7f0000"]]
 
 blendColor :: Color -> Color -> Color
-blendColor = todo
+blendColor (Color r g b) (Color r2 g2 b2) =
+  Color (div (r + r2) 2) (div (g + g2) 2) (div (b + b2) 2)
+
+
+blendColors :: NE.NonEmpty Color -> Color
+blendColors xs = Color newR newG newB
+  where
+    sumRGB = foldr (\(Color r g b) (accR, (accG, accB)) -> (r+accR, (g+accG, b+accB))) (0, (0,0)) xs
+    newR = fst sumRGB `div` NE.length xs
+    newG = fst (snd sumRGB) `div` NE.length xs
+    newB = snd (snd sumRGB) `div` NE.length xs
+
 
 combine :: (Color -> Color -> Color) -> Picture -> Picture -> Picture
-combine = todo
+combine cf (Picture p1) (Picture p2) = Picture final
+  where
+    final coord = cf (p1 coord) (p2 coord)
 
 ------------------------------------------------------------------------------
 
@@ -240,7 +259,10 @@ exampleCircle = fill red (circle 80 100 200)
 --        ["000000","000000","000000","000000","000000","000000"]]
 
 rectangle :: Int -> Int -> Int -> Int -> Shape
-rectangle x0 y0 w h = todo
+rectangle x0 y0 w h = Shape f
+  where
+    f (Coord x y) = between x x0 (x0+w-1) && between y y0 (y0+h-1)
+    between x a b = x >= a && x <= b
 ------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------
@@ -256,10 +278,12 @@ rectangle x0 y0 w h = todo
 -- shape.
 
 union :: Shape -> Shape -> Shape
-union = todo
+union (Shape f1) (Shape f2) = Shape f
+  where f coord = f1 coord || f2 coord
 
 cut :: Shape -> Shape -> Shape
-cut = todo
+cut (Shape f1) (Shape f2) = Shape f
+  where f coord = if f2 coord then False else f1 coord
 ------------------------------------------------------------------------------
 
 -- Here's a snowman, built using union from circles and rectangles.
@@ -287,7 +311,9 @@ exampleSnowman = fill white snowman
 --        ["000000","000000","000000"]]
 
 paintSolid :: Color -> Shape -> Picture -> Picture
-paintSolid color shape base = todo
+paintSolid c (Shape f) (Picture old) = Picture final
+  where final coord | f coord = c
+                    | otherwise = old coord
 ------------------------------------------------------------------------------
 
 allWhite :: Picture
@@ -332,8 +358,11 @@ stripes a b = Picture f
 --       ["000000","000000","000000","000000","000000"]]
 
 paint :: Picture -> Shape -> Picture -> Picture
-paint pat shape base = todo
-------------------------------------------------------------------------------
+paint (Picture pat) (Shape sf) (Picture base) = Picture f
+  where f coord  | sf coord = pat coord
+                 | otherwise = base coord
+
+  ------------------------------------------------------------------------------
 
 -- Here's a patterned version of the snowman example. See it by running:
 --   render examplePatterns 400 300 "patterns.png"
@@ -348,7 +377,13 @@ examplePatterns = (paint (solid black) hat . paint (stripes red yellow) legs . p
 -- Let's implement zooming and flipping images.
 
 flipCoordXY :: Coord -> Coord
-flipCoordXY (Coord x y) = (Coord y x)
+flipCoordXY (Coord x y) = Coord y x
+
+flipCoordX :: Coord -> Coord
+flipCoordX (Coord x y) = Coord (negate x) y
+
+flipCoordY :: Coord -> Coord
+flipCoordY (Coord x y) = Coord x (negate y)
 
 -- Flip a picture by switching x and y coordinates
 flipXY :: Picture -> Picture
@@ -395,19 +430,21 @@ xy = Picture f
 data Fill = Fill Color
 
 instance Transform Fill where
-  apply = todo
+  apply (Fill c) _ = Picture (\(Coord _ _) -> c)
 
 data Zoom = Zoom Int
   deriving Show
 
 instance Transform Zoom where
-  apply = todo
+  apply (Zoom z) pic = zoom z pic
 
 data Flip = FlipX | FlipY | FlipXY
   deriving Show
 
 instance Transform Flip where
-  apply = todo
+  apply FlipX (Picture f)  = Picture (f . flipCoordX)
+  apply FlipY (Picture f)  = Picture (f . flipCoordY)
+  apply FlipXY (Picture f) = Picture (f . flipCoordXY)
 ------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------
@@ -422,8 +459,8 @@ instance Transform Flip where
 data Chain a b = Chain a b
   deriving Show
 
-instance Transform (Chain a b) where
-  apply = todo
+instance (Transform a, Transform b) => Transform (Chain a b) where
+  apply (Chain t1 t2) = apply t1  . apply t2
 ------------------------------------------------------------------------------
 
 -- Now we can redefine largeVerticalStripes using the above Transforms.
@@ -461,7 +498,14 @@ data Blur = Blur
   deriving Show
 
 instance Transform Blur where
-  apply = todo
+  apply _ (Picture f) = Picture final
+    where final cd = blendColors (NE.fromList [f cd, right cd, left cd, up cd, down cd])
+
+          right (Coord x y) = f (Coord (x+1) y)
+          left (Coord x y) = f (Coord (x-1) y)
+          up (Coord x y) = f (Coord x (y+1))
+          down (Coord x y) = f (Coord x (y-1))
+
 ------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------
@@ -479,7 +523,8 @@ data BlurMany = BlurMany Int
   deriving Show
 
 instance Transform BlurMany where
-  apply = todo
+  apply (BlurMany 0) = id
+  apply (BlurMany n) = apply Blur . apply (BlurMany (n-1))
 ------------------------------------------------------------------------------
 
 -- Here's a blurred version of our original snowman. See it by running

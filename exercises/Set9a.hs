@@ -10,11 +10,11 @@
 
 module Set9a where
 
-import Data.Char
-import Data.List
-import Data.Ord
+import           Data.Char
+import           Data.List
+import           Data.Ord
 
-import Mooc.Todo
+import           Mooc.Todo
 
 ------------------------------------------------------------------------------
 -- Ex 1: Implement a function workload that takes in the number of
@@ -26,7 +26,12 @@ import Mooc.Todo
 -- Otherwise return "Ok."
 
 workload :: Int -> Int -> String
-workload nExercises hoursPerExercise = todo
+workload nExercises hoursPerExercise
+  | m  > 100 = "Holy moly!"
+  | m  < 10 = "Piece of cake!"
+  | otherwise = "Ok."
+  where
+    m = nExercises  * hoursPerExercise
 
 ------------------------------------------------------------------------------
 -- Ex 2: Implement the function echo that builds a string like this:
@@ -35,11 +40,10 @@ workload nExercises hoursPerExercise = todo
 --   echo "ECHO" ==> "ECHO, CHO, HO, O, "
 --   echo "X" ==> "X, "
 --   echo "" ==> ""
---
--- Hint: use recursion
 
 echo :: String -> String
-echo = todo
+echo ""     = ""
+echo (x:xs) = (x:xs)  ++ ", " ++ echo xs
 
 ------------------------------------------------------------------------------
 -- Ex 3: A country issues some banknotes. The banknotes have a serial
@@ -50,9 +54,12 @@ echo = todo
 --
 -- Given a list of bank note serial numbers (strings), count how many
 -- are valid.
+-- countValid ["3581585"]
 
 countValid :: [String] -> Int
-countValid = todo
+countValid xs = foldr (\x acc -> if isValid x then acc + 1 else acc) 0 xs
+  where
+    isValid c = (c !! 2 == c !! 4) || (c !! 3 == c !! 5)
 
 ------------------------------------------------------------------------------
 -- Ex 4: Find the first element that repeats two or more times _in a
@@ -64,7 +71,9 @@ countValid = todo
 --   repeated [1,2,1,2,3,3] ==> Just 3
 
 repeated :: Eq a => [a] -> Maybe a
-repeated = todo
+repeated []       = Nothing
+repeated [_]      = Nothing
+repeated (x:y:xs) = if x == y then Just x else repeated (y:xs)
 
 ------------------------------------------------------------------------------
 -- Ex 5: A laboratory has been collecting measurements. Some of the
@@ -86,7 +95,10 @@ repeated = todo
 --     ==> Left "no data"
 
 sumSuccess :: [Either String Int] -> Either String Int
-sumSuccess = todo
+sumSuccess = foldr f (Left "no data")
+  where f (Right x) (Right acc) = Right (x + acc)
+        f (Right x) _           = Right x
+        f left acc              = acc
 
 ------------------------------------------------------------------------------
 -- Ex 6: A combination lock can either be open or closed. The lock
@@ -108,30 +120,37 @@ sumSuccess = todo
 --   isOpen (open "0000" (lock (changeCode "0000" (open "1234" aLock)))) ==> True
 --   isOpen (open "1234" (lock (changeCode "0000" (open "1234" aLock)))) ==> False
 
-data Lock = LockUndefined
+data Lock = Lock Openness String
+  deriving Show
+
+data Openness = Closed | Opened
   deriving Show
 
 -- aLock should be a locked lock with the code "1234"
 aLock :: Lock
-aLock = todo
+aLock = Lock Closed "1234"
 
 -- isOpen returns True if the lock is open
 isOpen :: Lock -> Bool
-isOpen = todo
+isOpen (Lock Opened _) = True
+isOpen _               = False
 
 -- open tries to open the lock with the given code. If the code is
 -- wrong, nothing happens.
 open :: String -> Lock -> Lock
-open = todo
+open trial (Lock Closed code) =
+  if trial == code then Lock Opened code else Lock Closed code
+open _ l = l
 
 -- lock closes a lock. If the lock is already closed, nothing happens.
 lock :: Lock -> Lock
-lock = todo
+lock (Lock _ c) = Lock Closed c
 
 -- changeCode changes the code of an open lock. If the lock is closed,
 -- nothing happens.
 changeCode :: String -> Lock -> Lock
-changeCode = todo
+changeCode new (Lock Opened _) = Lock Opened new
+changeCode _ l                 = l
 
 ------------------------------------------------------------------------------
 -- Ex 7: Here's a type Text that just wraps a String. Implement an Eq
@@ -149,6 +168,10 @@ changeCode = todo
 data Text = Text String
   deriving Show
 
+instance Eq Text where
+  (==) (Text a) (Text b) = trimA == trimB
+    where trimA = filter (not . isSpace) a
+          trimB = filter (not . isSpace) b
 
 ------------------------------------------------------------------------------
 -- Ex 8: We can represent functions or mappings as lists of pairs.
@@ -182,7 +205,11 @@ data Text = Text String
 --       ==> [("a",1),("b",2)]
 
 compose :: (Eq a, Eq b) => [(a,b)] -> [(b,c)] -> [(a,c)]
-compose = todo
+compose [] _  = []
+compose _ []  = []
+compose (x:xs) ys = case lookup (snd x) ys of
+    Nothing -> compose xs ys
+    Just yv -> (fst x, yv) : compose xs ys
 
 ------------------------------------------------------------------------------
 -- Ex 9: Reorder a list using a list of indices.
@@ -226,4 +253,16 @@ multiply :: Permutation -> Permutation -> Permutation
 multiply p q = map (\i -> p !! (q !! i)) (identity (length p))
 
 permute :: Permutation -> [a] -> [a]
-permute = todo
+permute p xs = foldr (\(_, value) acc -> value : acc) [] sortedAssociation
+  where
+    sortedAssociation = sortBy (\(a, _) (b, _) -> compare a b) (zip p xs)
+-- below a way more elegant solution:
+-- permute perm xs = map snd (sort (zip perm xs))
+--
+-- it seems `sort` already figure out the sorting based on the first elem of a tuple
+-- and I didn't need to foldr really since I'm not folding to a single value but
+-- transforming a list to another, so I should have used MAP.
+--
+-- I just used fold because I finally understood how to use the basics of folds
+-- and now I'm using it everytime lol. I may even use to ask my girl to be my girlfriend.
+
