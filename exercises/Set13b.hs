@@ -2,13 +2,13 @@
 
 module Set13b where
 
-import Mooc.Todo
+import           Mooc.Todo
 
-import Control.Monad
-import Control.Monad.Trans.State
-import Data.Char
-import Data.IORef
-import Data.List
+import           Control.Monad
+import           Control.Monad.Trans.State
+import           Data.Char
+import           Data.IORef
+import           Data.List
 
 
 ------------------------------------------------------------------------------
@@ -42,7 +42,9 @@ test = do
   return (x<10)
 
 ifM :: Monad m => m Bool -> m a -> m a -> m a
-ifM opBool opThen opElse = todo
+ifM opBool opThen opElse = do
+  b <- opBool
+  if b then opThen else opElse
 
 ------------------------------------------------------------------------------
 -- Ex 2: the standard library function Control.Monad.mapM defines a
@@ -77,14 +79,21 @@ ifM opBool opThen opElse = todo
 -- examples & test outputs.
 safeDiv :: Double -> Double -> Maybe Double
 safeDiv x 0.0 = Nothing
-safeDiv x y = Just (x/y)
+safeDiv x y   = Just (x/y)
 
 perhapsIncrement :: Bool -> Int -> State Int ()
-perhapsIncrement True x = modify (+x)
+perhapsIncrement True x  = modify (+x)
 perhapsIncrement False _ = return ()
 
 mapM2 :: Monad m => (a -> b -> m c) -> [a] -> [b] -> m [c]
-mapM2 op xs ys = todo
+mapM2 op _ []      = return []
+mapM2 op [] _      = return []
+mapM2 op (x:xs) (y:ys) = op x y >>= \r ->
+                           mapM2 op xs ys >>= \cons ->
+                             return (r : cons)
+-- mapM2 op (x:xs) (y:ys) = do r <- op x y
+--                             cons <- mapM2 op xs ys
+--                             return (r : cons)
 
 ------------------------------------------------------------------------------
 -- Ex 3: Finding paths.
@@ -142,14 +151,21 @@ maze1 = [("Entry",["Pit","Corridor 1"])
 
 
 visit :: [(String,[String])] -> String -> State [String] ()
-visit maze place = todo
+visit maze place = do
+  s <- get
+  if place `elem` s then return ()
+    else do modify (\s -> place : s)
+            case lookup place maze of
+              Nothing        -> return ()
+              Just neighbors -> mapM_ (visit maze) neighbors
 
 -- Now you should be able to implement path using visit. If you run
 -- visit on a place using an empty state, you'll get a state that
 -- lists all the places that are reachable from the starting place.
 
 path :: [(String,[String])] -> String -> String -> Bool
-path maze place1 place2 = todo
+path maze place1 place2 = place2 `elem` visitables
+  where visitables = snd $ runState (visit maze place1) []
 
 ------------------------------------------------------------------------------
 -- Ex 4: Given two lists, ks and ns, find numbers i and j from ks,
@@ -165,7 +181,11 @@ path maze place1 place2 = todo
 -- PS. The tests don't care about the order of results.
 
 findSum2 :: [Int] -> [Int] -> [(Int,Int,Int)]
-findSum2 ks ns = todo
+findSum2 ks ns = do
+  k1 <- ks
+  k2 <- ks
+  let sum = k1 + k2
+  if sum `elem` ns then [(k1, k2, sum)] else []
 
 ------------------------------------------------------------------------------
 -- Ex 5: compute all possible sums of elements from the given
@@ -184,9 +204,14 @@ findSum2 ks ns = todo
 --     ==> [1,0]
 --   allSums [1,2,4]
 --     ==> [7,3,5,1,6,2,4,0]
-
+--
+-- One of the HARDEST exercises ever
+-- I didn't do alone, I needed help for that :/
 allSums :: [Int] -> [Int]
-allSums xs = todo
+allSums [] = [0]
+allSums (x:xs) = do
+  s <- allSums xs
+  [s, s + x]
 
 ------------------------------------------------------------------------------
 -- Ex 6: the standard library defines the function
@@ -216,7 +241,8 @@ sumBounded :: Int -> [Int] -> Maybe Int
 sumBounded k xs = foldM (f1 k) 0 xs
 
 f1 :: Int -> Int -> Int -> Maybe Int
-f1 k acc x = todo
+f1 k acc x = if sum > k then Nothing else Just sum
+  where sum = acc + x
 
 -- sumNotTwice computes the sum of a list, but counts only the first
 -- occurrence of each value.
@@ -230,7 +256,11 @@ sumNotTwice :: [Int] -> Int
 sumNotTwice xs = fst $ runState (foldM f2 0 xs) []
 
 f2 :: Int -> Int -> State [Int] Int
-f2 acc x = todo
+f2 acc x = do
+  s <- get
+  if x `elem` s then return acc
+    else do put (x : s)
+            return (acc + x)
 
 ------------------------------------------------------------------------------
 -- Ex 7: here is the Result type from Set12. Implement a Monad Result
@@ -255,7 +285,9 @@ data Result a = MkResult a | NoResult | Failure String deriving (Show,Eq)
 
 instance Functor Result where
   -- The same Functor instance you used in Set12 works here.
-  fmap = todo
+  fmap f (MkResult a) = MkResult (f a)
+  fmap f NoResult     = NoResult
+  fmap f (Failure v)  = Failure v
 
 -- This is an Applicative instance that works for any monad, you
 -- can just ignore it for now. We'll get back to Applicative later.
@@ -265,8 +297,11 @@ instance Applicative Result where
 
 instance Monad Result where
   -- implement return and >>=
-  return = todo
-  (>>=) = todo
+  return = MkResult
+  (>>=) r f
+    | MkResult v <- r = f v
+    | NoResult <- r = NoResult
+    | Failure e <- r = Failure e
 
 ------------------------------------------------------------------------------
 -- Ex 8: Here is the type SL that combines the State and Logger
@@ -314,7 +349,8 @@ modifySL f = SL (\s -> ((),f s,[]))
 
 instance Functor SL where
   -- implement fmap
-  fmap = todo
+  fmap f (SL sf) = SL (apply . sf)
+    where apply (x, state, logs) = (f x, state, logs)
 
 -- This is an Applicative instance that works for any monad, you
 -- can just ignore it for now. We'll get back to Applicative later.
@@ -324,8 +360,14 @@ instance Applicative SL where
 
 instance Monad SL where
   -- implement return and >>=
-  return = todo
-  (>>=) = todo
+  return x = SL $ \i -> (x, i, [])
+  (>>=) (SL sf) f = SL $ \s ->
+    let
+      (val1, state1, logs1) = sf s
+      newSF = f val1
+      (val2, state2, logs2) = runSL newSF state1
+    in
+      (val2, state2, logs1++logs2)
 
 ------------------------------------------------------------------------------
 -- Ex 9: Implement the operation mkCounter that produces the IO operations
@@ -352,5 +394,9 @@ instance Monad SL where
 --  *Set11b> get
 --  4
 
+-- Interesting, we're basically sharing state between two different calls
 mkCounter :: IO (IO (), IO Int)
-mkCounter = todo
+mkCounter =  do
+  let ref = newIORef 0
+  r <- ref
+  return (modifyIORef r (+1), readIORef r)

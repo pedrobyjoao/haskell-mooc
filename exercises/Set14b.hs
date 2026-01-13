@@ -10,23 +10,25 @@ module Set14b where
 --
 -- Let's start with some imports:
 
-import Mooc.Todo
+import           Mooc.Todo
 
 -- Utilities
-import qualified Data.ByteString.Lazy as LB
-import Data.Maybe
-import qualified Data.Text as T
-import qualified Data.Text.Read as TR
-import Data.Text.Encoding (encodeUtf8)
-import Text.Read (readMaybe)
+import qualified Data.ByteString.Lazy       as LB
+import qualified Data.ByteString.Lazy.Char8 as C8
+import           Data.Maybe
+import qualified Data.Text                  as T
+import           Data.Text.Encoding         (encodeUtf8)
+import qualified Data.Text.Read             as TR
+import           Text.Read                  (readMaybe)
 
 -- HTTP server
-import Network.Wai (pathInfo, responseLBS, Application)
-import Network.Wai.Handler.Warp (run)
-import Network.HTTP.Types (status200)
+import           Network.HTTP.Types         (status200, status400)
+import           Network.Wai                (Application, pathInfo, responseLBS)
+import           Network.Wai.Handler.Warp   (run)
 
 -- Database
-import Database.SQLite.Simple (open,execute,execute_,query,query_,Connection,Query(..))
+import           Database.SQLite.Simple     (Connection, Query (..), execute,
+                                             execute_, open, query, query_)
 
 ------------------------------------------------------------------------------
 -- Ex 1: Let's start with implementing some database operations. The
@@ -76,12 +78,16 @@ getAllQuery = Query (T.pack "SELECT account, amount FROM events;")
 -- NOTE! Do not add anything to the name, otherwise you'll get weird
 -- test failures later.
 openDatabase :: String -> IO Connection
-openDatabase = todo
+openDatabase name = do
+  db <- open name
+  query_ db initQuery :: IO [(String, Int)]
+  return db
 
 -- given a db connection, an account name, and an amount, deposit
 -- should add an (account, amount) row into the database
 deposit :: Connection -> T.Text -> Int -> IO ()
-deposit = todo
+deposit db ac amount = do
+  execute db depositQuery (ac, amount) :: IO ()
 
 ------------------------------------------------------------------------------
 -- Ex 2: Fetching an account's balance. Below you'll find
@@ -112,7 +118,9 @@ balanceQuery :: Query
 balanceQuery = Query (T.pack "SELECT amount FROM events WHERE account = ?;")
 
 balance :: Connection -> T.Text -> IO Int
-balance = todo
+balance db acc = do
+  xs <- query db balanceQuery [acc] :: IO [[Int]]
+  return $ sum $ concat xs
 
 ------------------------------------------------------------------------------
 -- Ex 3: Now that we have the database part covered, let's think about
@@ -144,14 +152,20 @@ balance = todo
 --   parseCommand [T.pack "deposit", T.pack "madoff", T.pack "123456"]
 --     ==> Just (Deposit "madoff" 123456)
 
-data Command = Deposit T.Text Int | Balance T.Text
+data Command = Deposit T.Text Int | Withdraw T.Text Int | Balance T.Text
   deriving (Show, Eq)
 
 parseInt :: T.Text -> Maybe Int
 parseInt = readMaybe . T.unpack
 
 parseCommand :: [T.Text] -> Maybe Command
-parseCommand = todo
+parseCommand [x, y]
+  | "balance" <- T.unpack x = Just $ Balance y
+  | otherwise = Nothing
+parseCommand [x, y, z]
+  | "deposit" <- T.unpack x = Deposit y <$> parseInt z
+  | "withdraw" <- T.unpack x = Withdraw y <$> parseInt z
+parseCommand _ = Nothing
 
 ------------------------------------------------------------------------------
 -- Ex 4: Running commands. Implement the IO operation perform that takes a
@@ -177,7 +191,10 @@ parseCommand = todo
 --   "0"
 
 perform :: Connection -> Maybe Command -> IO T.Text
-perform = todo
+perform db Nothing               = return (T.pack "unkwnon")
+perform db (Just (Balance name)) = balance db name >>= (\x -> return (T.pack $ show x))
+perform db (Just (Deposit name a)) = deposit db name a >> return (T.pack "OK")
+perform db (Just (Withdraw name a)) = withdraw db name a >> return (T.pack "OK")
 
 ------------------------------------------------------------------------------
 -- Ex 5: Next up, let's set up a simple HTTP server. Implement a WAI
@@ -197,7 +214,8 @@ encodeResponse t = LB.fromStrict (encodeUtf8 t)
 -- Remember:
 -- type Application = Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 simpleServer :: Application
-simpleServer request respond = todo
+simpleServer request respond =
+  respond (responseLBS status200 [] (C8.pack "BANK"))
 
 ------------------------------------------------------------------------------
 -- Ex 6: Now we finally have all the pieces we need to actually
@@ -226,7 +244,13 @@ simpleServer request respond = todo
 -- Remember:
 -- type Application = Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 server :: Connection -> Application
-server db request respond = todo
+server db request respond = do
+  let path = pathInfo request
+  case parseCommand path of
+    Nothing -> respond (responseLBS status400 [] (C8.pack "ERROR"))
+    cmd -> do
+      res <- perform db cmd
+      respond (responseLBS status200 [] (encodeResponse res))
 
 port :: Int
 port = 3421
@@ -257,6 +281,8 @@ main = do
 --   - Open <http://localhost:3421/balance/simon> in your browser.
 --     You should see the text 11.
 
+withdraw :: Connection -> T.Text -> Int -> IO ()
+withdraw db name amount = deposit db name (negate amount)
 
 ------------------------------------------------------------------------------
 -- Ex 8: Error handling. Modify the parseCommand function so that it
@@ -276,5 +302,3 @@ main = do
 --    - http://localhost:3421/deposit/pekka/1/3
 --    - http://localhost:3421/balance
 --    - http://localhost:3421/balance/matti/pekka
-
-
